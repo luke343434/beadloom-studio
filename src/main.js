@@ -271,29 +271,15 @@ function moveSelectionToInsert(sourceIndex, targetIndex) {
   return true;
 }
 
-function syncBraceletPositions() {
+function syncBraceletPositions(draggedUid = null) {
   const count = state.design.length;
   state.design.forEach((instance, index) => {
     const element = app.querySelector(`[data-uid="${instance.uid}"]`);
     if (!element) return;
     element.dataset.index = index;
+    if (instance.uid === draggedUid) return;
     element.style.setProperty('--angle', `${(360 / count) * index - 90}deg`);
   });
-}
-
-function createBeadDragGhost(element, clientX, clientY) {
-  const rect = element.getBoundingClientRect();
-  const ghost = element.cloneNode(true);
-  ghost.classList.remove('selected', 'primary-selected');
-  ghost.classList.add('bead-drag-ghost');
-  ghost.removeAttribute('data-index');
-  ghost.removeAttribute('data-uid');
-  ghost.style.width = `${rect.width}px`;
-  ghost.style.height = `${rect.height}px`;
-  ghost.style.left = `${clientX}px`;
-  ghost.style.top = `${clientY}px`;
-  document.body.appendChild(ghost);
-  return ghost;
 }
 
 function insertLibraryBead(beadId, targetIndex) {
@@ -537,7 +523,6 @@ function bindEvents() {
       let dragging = false;
       let targetIndex = -1;
       let lastTargetIndex = -1;
-      let ghost = null;
       element.setPointerCapture(event.pointerId);
 
       const handleMove = (moveEvent) => {
@@ -546,16 +531,15 @@ function bindEvents() {
         if (!dragging) {
           dragging = true;
           state.draggedBeadIndex = sourceIndex;
-          ghost = createBeadDragGhost(element, moveEvent.clientX, moveEvent.clientY);
-          element.classList.add('drag-origin');
+          element.classList.add('pointer-dragging');
           app.querySelector('.bracelet-stage')?.classList.add('is-dragging');
         }
-        ghost.style.left = `${moveEvent.clientX}px`;
-        ghost.style.top = `${moveEvent.clientY}px`;
+        element.style.setProperty('--drag-x', `${moveEvent.clientX - origin.x}px`);
+        element.style.setProperty('--drag-y', `${moveEvent.clientY - origin.y}px`);
         targetIndex = findNearestInsertIndex(moveEvent.clientX, moveEvent.clientY);
         if (targetIndex !== lastTargetIndex) {
           const currentIndex = state.design.findIndex((bead) => bead.uid === sourceUid);
-          if (moveSelectionToInsert(currentIndex, targetIndex)) syncBraceletPositions();
+          if (moveSelectionToInsert(currentIndex, targetIndex)) syncBraceletPositions(sourceUid);
           lastTargetIndex = targetIndex;
         }
       };
@@ -567,7 +551,9 @@ function bindEvents() {
           window.removeEventListener('pointercancel', handleUp);
           return;
         }
-        ghost?.remove();
+        element.classList.remove('pointer-dragging');
+        element.style.removeProperty('--drag-x');
+        element.style.removeProperty('--drag-y');
         state.draggedBeadIndex = -1;
         state.dragTargetIndex = -1;
         state.contextMenu = null;
