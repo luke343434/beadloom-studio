@@ -540,7 +540,7 @@ function render() {
               </div>` : state.managerDraftPhoto ? `<div class="url-photo-preview"><img src="${escapeHtml(state.managerDraftPhoto)}" alt="网址导入素材预览" referrerpolicy="no-referrer" /><button id="clear-photo" type="button">更换图片</button></div>` : `<label class="photo-uploader" for="material-photo"><span>＋</span><strong>拍照或上传图片</strong><small>上传后可拖动、缩放并圆形提取</small><input id="material-photo" type="file" accept="image/*" capture="environment" /></label>`}
               <div class="photo-url-import"><span>或者粘贴单颗珠子图片直链</span><div><input id="material-photo-url" class="manager-input" type="url" inputmode="url" placeholder="https://.../bead.jpg" /><button id="load-photo-url" type="button">载入网址</button></div><small>供应商禁止外链时，请先下载图片再从上方上传</small></div>
               <div class="manager-fields">
-                <label>素材名称<input class="manager-input" name="name" required maxlength="24" placeholder="例如：我的白水晶" /></label>
+                <label>素材名称<input class="manager-input" name="name" maxlength="24" placeholder="可选，例如：我的白水晶" /></label>
                 <label>品种<input class="manager-input" name="type" required maxlength="24" placeholder="例如：天然水晶" /></label>
                 <label>类目<select class="manager-input" name="category" required>${categories.filter((category) => category !== '全部').map((category) => `<option>${escapeHtml(category)}</option>`).join('')}</select></label>
                 <label>材质<input class="manager-input" name="material" maxlength="24" placeholder="矿石 / 金属 / 木质" /></label>
@@ -857,10 +857,11 @@ function bindEvents() {
       render();
       return;
     }
+    const type = String(form.get('type')).trim();
     const material = {
       id: `custom-${crypto.randomUUID()}`,
-      name: String(form.get('name')).trim(),
-      type: String(form.get('type')).trim(),
+      name: String(form.get('name')).trim() || type,
+      type,
       category: String(form.get('category')).trim(),
       material: String(form.get('material')).trim() || '自有素材',
       size: Number(form.get('size')),
