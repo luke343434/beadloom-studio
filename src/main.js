@@ -1,5 +1,16 @@
 import './style.css';
 
+const materialPhotoMap = {
+  amber: 'gemstone-color.jpg', agate: 'gemstone-color.jpg', onyx: 'gemstone-dark.jpg',
+  sandal: 'wood-red.jpg', ebony: 'wood-red.jpg', walnut: 'wood-prayer.jpg', bodhi: 'wood-prayer.jpg',
+  lapis: 'gemstone-blue.jpg', tiger: 'gemstone-dark.jpg', obsidian: 'gemstone-dark.jpg', turquoise: 'turquoise-charms.jpg', malachite: 'turquoise-charms.jpg',
+  jade: 'gemstone-color.jpg', 'jade-green': 'turquoise-charms.jpg', xiuyan: 'gemstone-color.jpg',
+  crystal: 'quartz-bracelet.jpg', amethyst: 'quartz-bracelet.jpg', 'rose-quartz': 'pearl-beads.jpg', moonstone: 'pearl-beads.jpg', aquamarine: 'gemstone-blue.jpg', garnet: 'gemstone-dark.jpg',
+  glass: 'pearl-beads.jpg', 'ceramic-blue': 'jewelry-market.jpg',
+  silver: 'metal-silver.jpg', 'gold-spacer': 'metal-gold.jpg', 'copper-spacer': 'metal-gold.jpg', 'lotus-spacer': 'metal-silver.jpg',
+  'ruyi-charm': 'gold-charms.jpg', 'gourd-charm': 'gold-charms.jpg', 'red-tassel': 'jewelry-market.jpg',
+};
+
 const builtInBeads = [
   { id: 'amber', name: '老蜜蜡', type: '琥珀', material: '有机宝石', size: 12, color: '琥珀金', tone: '#c77f32', category: '琥珀玛瑙', finish: '柔光蜡面', note: '温润通透，随光线呈现蜜糖层次', shape: 'round' },
   { id: 'agate', name: '南红玛瑙', type: '玛瑙', material: '矿石', size: 10, color: '柿子红', tone: '#bd503a', category: '琥珀玛瑙', finish: '玻璃光泽', note: '色泽浓郁，适合做醒目点缀', shape: 'round' },
@@ -31,7 +42,7 @@ const builtInBeads = [
   { id: 'ruyi-charm', name: '如意吊坠', type: '吊坠', material: '金属', size: 14, color: '暖金色', tone: '#bc9652', category: '吊坠流苏', finish: '镜面浮雕', note: '可作为手串视觉中心', shape: 'charm' },
   { id: 'gourd-charm', name: '葫芦吊坠', type: '吊坠', material: '金属', size: 15, color: '古铜色', tone: '#9b6a42', category: '吊坠流苏', finish: '做旧表面', note: '适合国风与文玩搭配', shape: 'charm' },
   { id: 'red-tassel', name: '朱砂流苏', type: '流苏', material: '丝线', size: 18, color: '朱砂红', tone: '#a8483d', category: '吊坠流苏', finish: '丝线编织', note: '用于增加垂坠感和东方气质', shape: 'charm' },
-];
+].map((bead) => ({ ...bead, photo: `${import.meta.env.BASE_URL}materials/${materialPhotoMap[bead.id]}` }));
 
 let customMaterials = [];
 let customCategories = [];
@@ -46,10 +57,7 @@ function allMaterials() {
   return [...builtInBeads, ...customMaterials];
 }
 
-const initialDesignIds = [
-  'sandal', 'sandal', 'lapis', 'sandal', 'amber', 'sandal', 'agate', 'sandal',
-  'lapis', 'sandal', 'amber', 'sandal', 'sandal', 'jade', 'sandal', 'lapis',
-];
+const initialDesignIds = [];
 
 function getBead(reference) {
   const id = typeof reference === 'string' ? reference : reference?.beadId ?? reference?.id;
@@ -76,11 +84,11 @@ const state = {
   activeCategory: '全部',
   search: '',
   selectedLibraryId: 'amber',
-  selectedBeadIndex: 4,
+  selectedBeadIndex: -1,
   braceletSize: 17.5,
   design: createInitialDesign(),
   selectedBeadUids: new Set(),
-  selectionAnchorIndex: 4,
+  selectionAnchorIndex: -1,
   multiSelectMode: false,
   draggedBeadIndex: -1,
   libraryDraggedId: null,
@@ -92,8 +100,6 @@ const state = {
   managerError: '',
   saved: false,
 };
-
-state.selectedBeadUids.add(state.design[4].uid);
 
 const app = document.querySelector('#app');
 
@@ -301,19 +307,19 @@ function render() {
           <div class="design-header"><div><span class="section-kicker">YOUR COMPOSITION</span><h2>春日留白 <button class="edit-title" aria-label="编辑设计名称">✎</button></h2><p>从左侧拖入珠子；多选后可批量移动、复制或删除</p></div><div class="view-controls"><button class="view-button active" aria-label="圆形视图">◉</button><button class="view-button" aria-label="平铺视图">☷</button></div></div>
           <div class="bracelet-stage" aria-label="手串预览区">
             <div class="stage-note top-note">可视化预览 <span></span></div>
-            <div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="center-label"><span>HANDMADE</span><strong>${state.braceletSize.toFixed(1)}</strong><small>手围 cm</small></div>
-            <div class="bracelet-beads">${state.design.map((instance, index) => {
+            <div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="center-label"><span>${state.design.length ? 'HANDMADE' : 'EMPTY DESIGN'}</span><strong>${state.design.length ? state.braceletSize.toFixed(1) : '0'}</strong><small>${state.design.length ? '手围 cm' : '颗珠子'}</small></div>
+            <div class="bracelet-beads">${state.design.length ? state.design.map((instance, index) => {
               const bead = getBead(instance);
               const angle = (360 / state.design.length) * index - 90;
               const selected = state.selectedBeadUids.has(instance.uid);
               const primary = state.selectedBeadIndex === index;
               const scale = 0.68 + (bead.size / 20) * 0.55;
               return `<button class="bracelet-bead ${bead.id} shape-${bead.shape ?? 'round'} ${selected ? 'selected' : ''} ${primary ? 'primary-selected' : ''}" data-index="${index}" draggable="true" aria-pressed="${selected}" aria-label="第 ${index + 1} 颗，${bead.name}${selected ? '，已选择' : ''}" style="--angle:${angle}deg;--scale:${scale};${beadStyle(bead)}"><span class="selection-check">✓</span>${materialPhoto(bead, 'bracelet-photo')}<span class="bead-glow"></span><span class="bead-shine"></span></button>`;
-            }).join('')}${state.design.map((_, insertIndex) => {
+            }).join('') + state.design.map((_, insertIndex) => {
               const angle = (360 / state.design.length) * (insertIndex - 0.5) - 90;
               return `<span class="drop-slot" data-insert-index="${insertIndex}" style="--angle:${angle}deg" aria-hidden="true"><i></i></span>`;
-            }).join('')}</div>
-            <div class="stage-note bottom-note"><span class="legend-line"></span>拖拽插入 · Ctrl/Cmd 多选</div>
+            }).join('') : '<span class="empty-drop-zone" data-insert-index="0"><i>＋</i><strong>拖入第一颗珠子</strong><small>从左侧实拍素材库开始</small></span>'}</div>
+            <div class="stage-note bottom-note"><span class="legend-line"></span>${state.design.length ? '拖拽插入 · Ctrl/Cmd 多选' : '当前为空手串'}</div>
           </div>
           <div class="design-toolbar"><span class="toolbar-count"><strong>${state.design.length}</strong> 颗珠子</span><button class="multi-select-button ${state.multiSelectMode ? 'active' : ''}" data-action="toggle-multi" aria-pressed="${state.multiSelectMode}">✓ 多选${selectionCount ? ` · ${selectionCount}` : ''}</button><span class="toolbar-divider"></span><button data-action="select-all">全选</button><button data-action="duplicate" ${selectionCount < 1 ? 'disabled' : ''}>⧉ 复制${selectionCount > 1 ? ` ${selectionCount} 颗` : ''}</button><button data-action="move-left" ${selectionCount < 1 ? 'disabled' : ''}>← 左移</button><button data-action="move-right" ${selectionCount < 1 ? 'disabled' : ''}>右移 →</button><button class="delete-button" data-action="delete" ${selectionCount < 1 || selectionCount >= state.design.length ? 'disabled' : ''}>⌫ 删除${selectionCount > 1 ? ` ${selectionCount} 颗` : ''}</button></div>
         </section>
@@ -800,7 +806,7 @@ function handleAction(action) {
   }
   if (action === 'reset') {
     state.design = createInitialDesign();
-    selectOnly(4);
+    selectOnly(-1);
     state.selectedLibraryId = 'amber';
     state.braceletSize = 17.5;
     state.multiSelectMode = false;
