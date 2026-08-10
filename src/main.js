@@ -35,6 +35,7 @@ const builtInBeads = [
 
 let customMaterials = [];
 let customCategories = [];
+let suppressLibraryClick = false;
 try {
   customCategories = JSON.parse(localStorage.getItem('beadloom-custom-categories') ?? '[]');
   if (!Array.isArray(customCategories)) customCategories = [];
@@ -476,7 +477,7 @@ function render() {
           <div class="search-box"><span>⌕</span><input id="search" type="search" value="${state.search}" placeholder="搜索珠子、材质..." aria-label="搜索珠子" /><kbd>/</kbd></div>
           <div class="category-tabs" role="tablist">${categories.map((category) => `<button class="category-tab ${state.activeCategory === category ? 'active' : ''}" data-category="${category}" role="tab" aria-selected="${state.activeCategory === category}">${category}</button>`).join('')}</div>
           <div class="bead-list">${beads.map((bead) => `
-            <button class="bead-card ${state.selectedLibraryId === bead.id && state.selectedBeadIndex < 0 ? 'selected' : ''}" data-bead="${bead.id}" draggable="true" aria-pressed="${state.selectedLibraryId === bead.id && state.selectedBeadIndex < 0}" aria-label="${bead.name}，拖入手串或点击选择">
+            <button class="bead-card ${state.selectedLibraryId === bead.id && state.selectedBeadIndex < 0 ? 'selected' : ''}" data-bead="${bead.id}" aria-pressed="${state.selectedLibraryId === bead.id && state.selectedBeadIndex < 0}" aria-label="${bead.name}，拖入手串或点击选择">
               <span class="bead-thumb ${bead.id} shape-${bead.shape ?? 'round'} ${bead.photo ? 'photo-only' : ''}" style="${beadStyle(bead)}">${materialPhoto(bead)}<span></span></span>
               <span class="bead-card-copy"><strong>${bead.name}</strong><span>${bead.type} · ${bead.size} mm</span></span>
               <span class="add-symbol" aria-hidden="true">⠿</span>
@@ -495,7 +496,7 @@ function render() {
               const selected = state.selectedBeadUids.has(instance.uid);
               const primary = state.selectedBeadIndex === index;
               const scale = 0.68 + (bead.size / 20) * 0.55;
-              return `<button class="bracelet-bead ${bead.id} shape-${bead.shape ?? 'round'} ${bead.photo ? 'photo-only' : ''} ${selected ? 'selected' : ''} ${primary ? 'primary-selected' : ''}" data-index="${index}" draggable="true" aria-pressed="${selected}" aria-label="第 ${index + 1} 颗，${bead.name}${selected ? '，已选择' : ''}" style="--angle:${angle}deg;--scale:${scale};${beadStyle(bead)}"><span class="selection-check">✓</span>${materialPhoto(bead, 'bracelet-photo')}<span class="bead-glow"></span><span class="bead-shine"></span></button>`;
+              return `<button class="bracelet-bead ${bead.id} shape-${bead.shape ?? 'round'} ${bead.photo ? 'photo-only' : ''} ${selected ? 'selected' : ''} ${primary ? 'primary-selected' : ''}" data-index="${index}" aria-pressed="${selected}" aria-label="第 ${index + 1} 颗，${bead.name}${selected ? '，已选择' : ''}" style="--angle:${angle}deg;--scale:${scale};${beadStyle(bead)}"><span class="selection-check">✓</span>${materialPhoto(bead, 'bracelet-photo')}<span class="bead-glow"></span><span class="bead-shine"></span></button>`;
             }).join('') + state.design.map((_, insertIndex) => {
               const angle = (360 / state.design.length) * (insertIndex - 0.5) - 90;
               return `<span class="drop-slot" data-insert-index="${insertIndex}" style="--angle:${angle}deg" aria-hidden="true"><i></i></span>`;
@@ -568,24 +569,14 @@ function render() {
 function bindEvents() {
   app.querySelectorAll('[data-bead]').forEach((element) => {
     element.addEventListener('click', () => {
+      if (suppressLibraryClick) {
+        suppressLibraryClick = false;
+        return;
+      }
       state.selectedLibraryId = element.dataset.bead;
       state.selectedBeadIndex = -1;
       state.selectedBeadUids.clear();
       render();
-    });
-    element.addEventListener('dragstart', (event) => {
-      state.libraryDraggedId = element.dataset.bead;
-      state.draggedBeadIndex = -1;
-      event.dataTransfer.effectAllowed = 'copy';
-      event.dataTransfer.setData('application/x-bead-id', element.dataset.bead);
-      event.dataTransfer.setData('text/plain', `library:${element.dataset.bead}`);
-      element.classList.add('dragging');
-      app.querySelector('.bracelet-stage')?.classList.add('is-dragging', 'is-library-dragging');
-    });
-    element.addEventListener('dragend', () => {
-      state.libraryDraggedId = null;
-      element.classList.remove('dragging');
-      app.querySelector('.bracelet-stage')?.classList.remove('is-dragging', 'is-library-dragging');
     });
     element.addEventListener('pointerdown', (event) => {
       if (event.button !== 0) return;
@@ -601,6 +592,7 @@ function bindEvents() {
         moveEvent.preventDefault();
         if (!dragging) {
           dragging = true;
+          suppressLibraryClick = true;
           state.libraryDraggedId = beadId;
           element.classList.add('dragging');
           app.querySelector('.bracelet-stage')?.classList.add('is-dragging', 'is-library-dragging');
@@ -614,6 +606,7 @@ function bindEvents() {
           state.libraryDraggedId = null;
           state.dragTargetIndex = -1;
           render();
+          setTimeout(() => { suppressLibraryClick = false; }, 0);
         }
         window.removeEventListener('pointermove', handleMove);
         window.removeEventListener('pointerup', handleUp);
@@ -727,40 +720,6 @@ function bindEvents() {
       window.addEventListener('mousemove', handleMove, { passive: false });
       window.addEventListener('mouseup', handleUp, { once: true });
     });
-    element.addEventListener('dragstart', (event) => {
-      state.draggedBeadIndex = Number(element.dataset.index);
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', element.dataset.index);
-      element.classList.add('dragging');
-      app.querySelector('.bracelet-stage')?.classList.add('is-dragging');
-    });
-    element.addEventListener('dragend', () => {
-      state.draggedBeadIndex = -1;
-      state.dragTargetIndex = -1;
-      element.classList.remove('dragging');
-      app.querySelector('.bracelet-stage')?.classList.remove('is-dragging');
-    });
-  });
-  app.querySelector('.bracelet-stage')?.addEventListener('dragover', (event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = state.libraryDraggedId ? 'copy' : 'move';
-    findNearestInsertIndex(event.clientX, event.clientY);
-  });
-  app.querySelector('.bracelet-stage')?.addEventListener('drop', (event) => {
-    event.preventDefault();
-    const targetIndex = findNearestInsertIndex(event.clientX, event.clientY);
-    const libraryId = state.libraryDraggedId || event.dataTransfer.getData('application/x-bead-id') || event.dataTransfer.getData('text/plain').replace(/^library:/, '');
-    if (state.libraryDraggedId || event.dataTransfer.getData('text/plain').startsWith('library:')) {
-      insertLibraryBead(libraryId, targetIndex);
-    } else {
-      const sourceIndex = state.draggedBeadIndex >= 0 ? state.draggedBeadIndex : Number(event.dataTransfer.getData('text/plain'));
-      moveSelectionToInsert(sourceIndex, targetIndex);
-    }
-    state.draggedBeadIndex = -1;
-    state.libraryDraggedId = null;
-    state.dragTargetIndex = -1;
-    state.contextMenu = null;
-    render();
   });
   app.querySelector('[data-property="size"]')?.addEventListener('input', (event) => {
     const index = state.contextMenu?.index;

@@ -144,8 +144,8 @@ kbd { border: 1px solid #d6d0c7; border-bottom-width: 2px; border-radius: 3px; p
 /* Crop workspace: keep the source image, extraction guide, and result readable on every screen. */
 .photo-only::after, .photo-only > .bead-shine, .photo-only > .bead-glow, .photo-only > span:not(.selection-check) { display: none; }
 .photo-cropper { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 12px; }
-.crop-stage { position: relative; grid-column: 1 / -1; min-height: 245px; border: 1px solid #c9bfb3; border-radius: 7px; background: #e8e1d8; overflow: hidden; }
-.crop-stage canvas { display: block; width: 100%; height: 245px; cursor: grab; object-fit: fill; touch-action: none; }
+.crop-stage { position: relative; grid-column: 1 / -1; border: 1px solid #c9bfb3; border-radius: 7px; background: #e8e1d8; overflow: hidden; }
+.crop-stage canvas { display: block; width: 100%; height: auto; aspect-ratio: 15 / 8; cursor: grab; touch-action: none; }
 .crop-stage canvas:active { cursor: grabbing; }
 .crop-hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 5px 9px; border: 1px solid rgba(255,255,255,.34); border-radius: 3px; color: #fff; background: rgba(42,38,33,.66); font-size: 9px; letter-spacing: .4px; white-space: nowrap; pointer-events: none; }
 .crop-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: end; gap: 7px; }
@@ -163,4 +163,4 @@ kbd { border: 1px solid #d6d0c7; border-bottom-width: 2px; border-radius: 3px; p
 .url-photo-preview { position: relative; display: grid; place-items: center; height: 185px; border: 1px solid #c9bfb3; border-radius: 7px; background: #eee8df; overflow: hidden; }
 .url-photo-preview img { width: 100%; height: 100%; object-fit: contain; }
 .url-photo-preview button { position: absolute; right: 10px; bottom: 10px; padding: 6px 9px; border-radius: 3px; color: #fff; background: rgba(42,38,33,.72); font-size: 9px; }
-@media (max-width: 640px) { .photo-cropper { grid-template-columns: 1fr; }.crop-stage { min-height: 215px; }.crop-stage canvas { height: 215px; }.crop-controls { grid-template-columns: 1fr 1fr 1fr; }.crop-controls > label:first-child { grid-column: 1 / -1; }.crop-result { min-height: 94px; }.crop-result img { width: 80px; height: 80px; } }
+@media (max-width: 640px) { .photo-cropper { grid-template-columns: 1fr; }.crop-controls { grid-template-columns: 1fr 1fr 1fr; }.crop-controls > label:first-child { grid-column: 1 / -1; }.crop-result { min-height: 94px; }.crop-result img { width: 80px; height: 80px; } }
