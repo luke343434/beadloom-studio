@@ -127,44 +127,6 @@ function materialPhoto(bead, className = 'bead-photo') {
   return bead.photo ? `<img class="${className}" src="${escapeHtml(bead.photo)}" alt="" referrerpolicy="no-referrer" />` : '';
 }
 
-function openMaterialDatabase() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('beadloom-material-library', 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains('materials')) request.result.createObjectStore('materials', { keyPath: 'id' });
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function loadCustomMaterials() {
-  const database = await openMaterialDatabase();
-  return new Promise((resolve, reject) => {
-    const request = database.transaction('materials', 'readonly').objectStore('materials').getAll();
-    request.onsuccess = () => resolve(request.result ?? []);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveCustomMaterial(material) {
-  const database = await openMaterialDatabase();
-  return new Promise((resolve, reject) => {
-    const request = database.transaction('materials', 'readwrite').objectStore('materials').put(material);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function deleteCustomMaterial(id) {
-  const database = await openMaterialDatabase();
-  return new Promise((resolve, reject) => {
-    const request = database.transaction('materials', 'readwrite').objectStore('materials').delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-}
-
 function optimizeMaterialPhoto(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -875,28 +837,26 @@ function bindEvents() {
       createdAt: new Date().toISOString(),
     };
     try {
-      await saveCustomMaterial(material);
       customMaterials.push(material);
       state.managerDraftPhoto = '';
       state.managerSourcePhoto = '';
       state.managerError = '';
       state.selectedLibraryId = material.id;
       state.activeCategory = '全部';
-      state.exportNotice = '素材已保存';
+      state.exportNotice = '素材已加入本次使用';
       render();
       setTimeout(() => {
         state.exportNotice = '';
         render();
       }, 2200);
     } catch {
-      state.managerError = '素材保存失败，请检查浏览器存储空间';
+      state.managerError = '素材添加失败，请重新尝试';
       render();
     }
   });
   app.querySelectorAll('[data-delete-material]').forEach((element) => element.addEventListener('click', async () => {
     const id = element.dataset.deleteMaterial;
     if (state.design.some((item) => item.beadId === id)) return;
-    await deleteCustomMaterial(id);
     customMaterials = customMaterials.filter((bead) => bead.id !== id);
     if (state.selectedLibraryId === id) state.selectedLibraryId = customMaterials[0]?.id ?? null;
     render();
@@ -1301,17 +1261,17 @@ document.addEventListener('keydown', (event) => {
 });
 
 async function initializeApp() {
-  try {
-    customMaterials = await loadCustomMaterials();
-  } catch {
-    customMaterials = [];
-  }
+  customMaterials = [];
   const persisted = localStorage.getItem('beadloom-design');
   if (persisted) {
     try {
       const savedDesign = JSON.parse(persisted);
       if (Array.isArray(savedDesign.design) && savedDesign.design.length) {
-        state.design = savedDesign.design.map((item) => typeof item === 'string' ? createBeadInstance(item) : createBeadInstance(item.beadId ?? item.id, item));
+        const availableDesign = savedDesign.design.filter((item) => {
+          const id = typeof item === 'string' ? item : item.beadId ?? item.id;
+          return builtInBeads.some((bead) => bead.id === id);
+        });
+        state.design = availableDesign.map((item) => typeof item === 'string' ? createBeadInstance(item) : createBeadInstance(item.beadId ?? item.id, item));
       }
       if (savedDesign.braceletSize) state.braceletSize = Number(savedDesign.braceletSize);
       state.saved = true;
