@@ -1,16 +1,5 @@
 import './style.css';
 
-const materialPhotoMap = {
-  amber: 'gemstone-color.jpg', agate: 'gemstone-color.jpg', onyx: 'gemstone-dark.jpg',
-  sandal: 'wood-red.jpg', ebony: 'wood-red.jpg', walnut: 'wood-prayer.jpg', bodhi: 'wood-prayer.jpg',
-  lapis: 'gemstone-blue.jpg', tiger: 'gemstone-dark.jpg', obsidian: 'gemstone-dark.jpg', turquoise: 'turquoise-charms.jpg', malachite: 'turquoise-charms.jpg',
-  jade: 'gemstone-color.jpg', 'jade-green': 'turquoise-charms.jpg', xiuyan: 'gemstone-color.jpg',
-  crystal: 'quartz-bracelet.jpg', amethyst: 'quartz-bracelet.jpg', 'rose-quartz': 'pearl-beads.jpg', moonstone: 'pearl-beads.jpg', aquamarine: 'gemstone-blue.jpg', garnet: 'gemstone-dark.jpg',
-  glass: 'pearl-beads.jpg', 'ceramic-blue': 'jewelry-market.jpg',
-  silver: 'metal-silver.jpg', 'gold-spacer': 'metal-gold.jpg', 'copper-spacer': 'metal-gold.jpg', 'lotus-spacer': 'metal-silver.jpg',
-  'ruyi-charm': 'gold-charms.jpg', 'gourd-charm': 'gold-charms.jpg', 'red-tassel': 'jewelry-market.jpg',
-};
-
 const builtInBeads = [
   { id: 'amber', name: '老蜜蜡', type: '琥珀', material: '有机宝石', size: 12, color: '琥珀金', tone: '#c77f32', category: '琥珀玛瑙', finish: '柔光蜡面', note: '温润通透，随光线呈现蜜糖层次', shape: 'round' },
   { id: 'agate', name: '南红玛瑙', type: '玛瑙', material: '矿石', size: 10, color: '柿子红', tone: '#bd503a', category: '琥珀玛瑙', finish: '玻璃光泽', note: '色泽浓郁，适合做醒目点缀', shape: 'round' },
@@ -42,7 +31,7 @@ const builtInBeads = [
   { id: 'ruyi-charm', name: '如意吊坠', type: '吊坠', material: '金属', size: 14, color: '暖金色', tone: '#bc9652', category: '吊坠流苏', finish: '镜面浮雕', note: '可作为手串视觉中心', shape: 'charm' },
   { id: 'gourd-charm', name: '葫芦吊坠', type: '吊坠', material: '金属', size: 15, color: '古铜色', tone: '#9b6a42', category: '吊坠流苏', finish: '做旧表面', note: '适合国风与文玩搭配', shape: 'charm' },
   { id: 'red-tassel', name: '朱砂流苏', type: '流苏', material: '丝线', size: 18, color: '朱砂红', tone: '#a8483d', category: '吊坠流苏', finish: '丝线编织', note: '用于增加垂坠感和东方气质', shape: 'charm' },
-].map((bead) => ({ ...bead, photo: `${import.meta.env.BASE_URL}materials/${materialPhotoMap[bead.id]}` }));
+];
 
 let customMaterials = [];
 let customCategories = [];
@@ -55,6 +44,10 @@ try {
 
 function allMaterials() {
   return [...builtInBeads, ...customMaterials];
+}
+
+function libraryMaterials() {
+  return customMaterials;
 }
 
 const initialDesignIds = [];
@@ -83,7 +76,7 @@ function createInitialDesign() {
 const state = {
   activeCategory: '全部',
   search: '',
-  selectedLibraryId: 'amber',
+  selectedLibraryId: null,
   selectedBeadIndex: -1,
   braceletSize: 17.5,
   design: createInitialDesign(),
@@ -105,9 +98,8 @@ const app = document.querySelector('#app');
 
 function filteredBeads() {
   const query = state.search.trim().toLowerCase();
-  return allMaterials().filter((bead) => {
-    const matchesCategory = state.activeCategory === '全部'
-      || (state.activeCategory === '我的素材' ? bead.custom : bead.category === state.activeCategory);
+  return libraryMaterials().filter((bead) => {
+    const matchesCategory = state.activeCategory === '全部' || bead.category === state.activeCategory;
     const matchesSearch = !query || `${bead.name}${bead.type}${bead.material}${bead.category}${bead.color}`.toLowerCase().includes(query);
     return matchesCategory && matchesSearch;
   });
@@ -178,15 +170,105 @@ function optimizeMaterialPhoto(file) {
       const image = new Image();
       image.onerror = () => reject(new Error('图片读取失败'));
       image.onload = () => {
-        const size = Math.min(image.width, image.height);
-        const sourceX = (image.width - size) / 2;
-        const sourceY = (image.height - size) / 2;
-        const canvas = document.createElement('canvas');
-        canvas.width = 720;
-        canvas.height = 720;
-        const context = canvas.getContext('2d');
-        context.drawImage(image, sourceX, sourceY, size, size, 0, 0, 720, 720);
-        resolve(canvas.toDataURL('image/jpeg', .84));
+        const scale = Math.min(1, 900 / Math.max(image.width, image.height));
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        const working = document.createElement('canvas');
+        working.width = width;
+        working.height = height;
+        const workingContext = working.getContext('2d', { willReadFrequently: true });
+        workingContext.drawImage(image, 0, 0, width, height);
+        const imageData = workingContext.getImageData(0, 0, width, height);
+        const pixels = imageData.data;
+        const sampleSize = Math.max(6, Math.round(Math.min(width, height) * .045));
+        const samples = [];
+        const addSample = (startX, startY) => {
+          for (let y = startY; y < startY + sampleSize; y += 1) {
+            for (let x = startX; x < startX + sampleSize; x += 1) {
+              const offset = (y * width + x) * 4;
+              if (pixels[offset + 3] > 20) samples.push([pixels[offset], pixels[offset + 1], pixels[offset + 2]]);
+            }
+          }
+        };
+        addSample(0, 0);
+        addSample(width - sampleSize, 0);
+        addSample(0, height - sampleSize);
+        addSample(width - sampleSize, height - sampleSize);
+        const background = samples.reduce((sum, color) => [sum[0] + color[0], sum[1] + color[1], sum[2] + color[2]], [0, 0, 0]).map((value) => value / Math.max(1, samples.length));
+        const colorDistance = (offset) => Math.hypot(pixels[offset] - background[0], pixels[offset + 1] - background[1], pixels[offset + 2] - background[2]);
+        const cornerVariation = samples.reduce((sum, color) => sum + Math.hypot(color[0] - background[0], color[1] - background[1], color[2] - background[2]), 0) / Math.max(1, samples.length);
+        const threshold = Math.max(32, Math.min(76, 34 + cornerVariation * 1.8));
+        const total = width * height;
+        const removed = new Uint8Array(total);
+        const queue = new Int32Array(total);
+        let head = 0;
+        let tail = 0;
+        const tryQueue = (index) => {
+          if (removed[index]) return;
+          const offset = index * 4;
+          if (pixels[offset + 3] < 20 || colorDistance(offset) <= threshold) {
+            removed[index] = 1;
+            queue[tail] = index;
+            tail += 1;
+          }
+        };
+        for (let x = 0; x < width; x += 1) {
+          tryQueue(x);
+          tryQueue((height - 1) * width + x);
+        }
+        for (let y = 1; y < height - 1; y += 1) {
+          tryQueue(y * width);
+          tryQueue(y * width + width - 1);
+        }
+        while (head < tail) {
+          const index = queue[head];
+          head += 1;
+          const x = index % width;
+          const y = Math.floor(index / width);
+          if (x > 0) tryQueue(index - 1);
+          if (x < width - 1) tryQueue(index + 1);
+          if (y > 0) tryQueue(index - width);
+          if (y < height - 1) tryQueue(index + width);
+        }
+        let minX = width;
+        let minY = height;
+        let maxX = -1;
+        let maxY = -1;
+        for (let index = 0; index < total; index += 1) {
+          const offset = index * 4;
+          if (removed[index]) {
+            pixels[offset + 3] = 0;
+            continue;
+          }
+          const x = index % width;
+          const y = Math.floor(index / width);
+          const edgeNeighbor = (x > 0 && removed[index - 1]) || (x < width - 1 && removed[index + 1]) || (y > 0 && removed[index - width]) || (y < height - 1 && removed[index + width]);
+          if (edgeNeighbor) pixels[offset + 3] = Math.min(pixels[offset + 3], Math.max(35, Math.min(255, (colorDistance(offset) - threshold + 14) * 12)));
+          if (pixels[offset + 3] > 18) {
+            minX = Math.min(minX, x);
+            minY = Math.min(minY, y);
+            maxX = Math.max(maxX, x);
+            maxY = Math.max(maxY, y);
+          }
+        }
+        workingContext.putImageData(imageData, 0, 0);
+        if (maxX < minX || maxY < minY) return reject(new Error('未识别到主体'));
+        const subjectWidth = maxX - minX + 1;
+        const subjectHeight = maxY - minY + 1;
+        const padding = Math.round(Math.max(subjectWidth, subjectHeight) * .08);
+        const cropX = Math.max(0, minX - padding);
+        const cropY = Math.max(0, minY - padding);
+        const cropWidth = Math.min(width - cropX, subjectWidth + padding * 2);
+        const cropHeight = Math.min(height - cropY, subjectHeight + padding * 2);
+        const output = document.createElement('canvas');
+        output.width = 720;
+        output.height = 720;
+        const outputContext = output.getContext('2d');
+        const outputScale = Math.min(650 / cropWidth, 650 / cropHeight);
+        const outputWidth = cropWidth * outputScale;
+        const outputHeight = cropHeight * outputScale;
+        outputContext.drawImage(working, cropX, cropY, cropWidth, cropHeight, (720 - outputWidth) / 2, (720 - outputHeight) / 2, outputWidth, outputHeight);
+        resolve(output.toDataURL('image/png'));
       };
       image.src = reader.result;
     };
@@ -263,13 +345,14 @@ function insertLibraryBead(beadId, targetIndex) {
 }
 
 function render() {
-  const selectedLibrary = getBead(state.selectedLibraryId);
+  const selectedLibrary = state.selectedLibraryId ? getBead(state.selectedLibraryId) : null;
   const selectedBead = state.selectedBeadIndex >= 0 ? getBead(state.design[state.selectedBeadIndex]) : selectedLibrary;
   const contextInstance = state.contextMenu ? state.design[state.contextMenu.index] : null;
   const contextBead = contextInstance ? getBead(contextInstance) : null;
   const contextSelectionCount = state.contextMenu?.selectedUids?.filter((uid) => state.design.some((bead) => bead.uid === uid)).length ?? 0;
   const { length, circumference, gap } = totals();
-  const categories = ['全部', ...new Set([...allMaterials().map((bead) => bead.category), ...customCategories]), '我的素材'];
+  const basePersonalCategories = ['珠子', '隔片配件', '吊坠流苏'];
+  const categories = ['全部', ...new Set([...basePersonalCategories, ...libraryMaterials().map((bead) => bead.category), ...customCategories])];
   const beads = filteredBeads();
   const selectionCount = state.selectedBeadUids.size;
 
@@ -291,7 +374,7 @@ function render() {
 
       <main class="workspace">
         <aside class="library-panel">
-          <div class="panel-heading"><div><span class="section-kicker">COLLECTION</span><h1>素材库</h1></div><div class="library-heading-actions"><span class="count-label">${allMaterials().length} 件</span><button data-action="open-manager">管理 ＋</button></div></div>
+          <div class="panel-heading"><div><span class="section-kicker">MY COLLECTION</span><h1>我的素材</h1></div><div class="library-heading-actions"><span class="count-label">${libraryMaterials().length} 件</span><button data-action="open-manager">添加 ＋</button></div></div>
           <div class="search-box"><span>⌕</span><input id="search" type="search" value="${state.search}" placeholder="搜索珠子、材质..." aria-label="搜索珠子" /><kbd>/</kbd></div>
           <div class="category-tabs" role="tablist">${categories.map((category) => `<button class="category-tab ${state.activeCategory === category ? 'active' : ''}" data-category="${category}" role="tab" aria-selected="${state.activeCategory === category}">${category}</button>`).join('')}</div>
           <div class="bead-list">${beads.map((bead) => `
@@ -299,8 +382,8 @@ function render() {
               <span class="bead-thumb ${bead.id} shape-${bead.shape ?? 'round'}" style="${beadStyle(bead)}">${materialPhoto(bead)}<span></span></span>
               <span class="bead-card-copy"><strong>${bead.name}</strong><span>${bead.type} · ${bead.size} mm</span></span>
               <span class="add-symbol" aria-hidden="true">⠿</span>
-            </button>`).join('') || '<p class="empty-state">没有找到匹配的珠子</p>'}</div>
-          <button class="library-footer" data-action="add"><span>＋</span> 添加选中的珠子</button>
+            </button>`).join('') || `<div class="library-onboarding"><span>◎</span><strong>${libraryMaterials().length ? '没有匹配的素材' : '拍下你手里的第一颗珠子'}</strong><small>${libraryMaterials().length ? '换个关键词或类目试试' : '应用会自动抠图并放入这里'}</small><button data-action="open-manager">拍照添加</button></div>`}</div>
+          ${selectedLibrary ? '<button class="library-footer" data-action="add"><span>＋</span> 添加选中的珠子</button>' : ''}
         </aside>
 
         <section class="design-panel">
@@ -325,11 +408,11 @@ function render() {
         </section>
 
         <aside class="inspector-panel">
-          <div class="inspector-heading"><span class="section-kicker">INSPECTOR</span><h2>${selectionCount > 1 ? `已选 ${selectionCount} 颗` : state.selectedBeadIndex >= 0 ? '已选珠子' : '准备添加'}</h2></div>
-          <div class="selected-preview"><span class="large-bead ${selectedBead.id} shape-${selectedBead.shape ?? 'round'}" style="${beadStyle(selectedBead)}">${materialPhoto(selectedBead, 'large-photo')}<span></span></span><div><strong>${selectedBead.name}</strong><span>${selectedBead.type}</span></div><button data-action="clear-selection" aria-label="取消选择">×</button></div>
+          <div class="inspector-heading"><span class="section-kicker">INSPECTOR</span><h2>${selectionCount > 1 ? `已选 ${selectionCount} 颗` : selectedBead ? state.selectedBeadIndex >= 0 ? '已选珠子' : '准备添加' : '等待素材'}</h2></div>
+          ${selectedBead ? `<div class="selected-preview"><span class="large-bead ${selectedBead.id} shape-${selectedBead.shape ?? 'round'}" style="${beadStyle(selectedBead)}">${materialPhoto(selectedBead, 'large-photo')}<span></span></span><div><strong>${selectedBead.name}</strong><span>${selectedBead.type}</span></div><button data-action="clear-selection" aria-label="取消选择">×</button></div>
           <div class="detail-list"><div><span>材质</span><strong>${selectedBead.material}</strong></div><div><span>颜色</span><strong><i class="color-dot" style="background:${selectedBead.tone}"></i>${selectedBead.color}</strong></div><div><span>直径</span><strong>${selectedBead.size} mm</strong></div><div><span>表面</span><strong>${selectedBead.finish}</strong></div></div>
           <p class="bead-note">“${selectedBead.note}”</p>
-          <button class="add-inspector-button" data-action="add"><span>＋</span> 加入手串</button>
+          ${selectedLibrary ? '<button class="add-inspector-button" data-action="add"><span>＋</span> 加入手串</button>' : ''}` : '<div class="inspector-empty"><span>◎</span><strong>还没有个人素材</strong><small>从左侧拍照添加珠子或配件</small></div>'}
           <div class="measure-section"><div class="measure-heading"><span class="section-kicker">MEASUREMENTS</span><span>实时估算</span></div><div class="measure-grid"><div class="measure-card"><span>成品周长</span><strong>${circumference}<small> cm</small></strong></div><div class="measure-card"><span>珠子总长</span><strong>${length}<small> mm</small></strong></div><div class="measure-card"><span>预留空隙</span><strong>${gap}<small> mm</small></strong></div><div class="measure-card"><span>建议线长</span><strong>${(state.braceletSize + 5).toFixed(0)}<small> cm</small></strong></div></div></div>
           <div class="size-section"><div class="measure-heading"><span class="section-kicker">WRIST SIZE</span><strong>${state.braceletSize.toFixed(1)} cm</strong></div><input id="size-range" class="size-range" type="range" min="14" max="22" step="0.5" value="${state.braceletSize}" aria-label="手腕尺寸" /><div class="range-labels"><span>14 cm</span><span>22 cm</span></div></div>
         </aside>
@@ -352,14 +435,14 @@ function render() {
           <div class="manager-layout">
             <form id="material-form" class="material-form">
               <label class="photo-uploader" for="material-photo">
-                ${state.managerDraftPhoto ? `<img src="${escapeHtml(state.managerDraftPhoto)}" alt="待添加素材预览" referrerpolicy="no-referrer" />` : '<span>＋</span><strong>拍照或上传图片</strong><small>自动裁切并压缩</small>'}
+                ${state.managerDraftPhoto ? `<img src="${escapeHtml(state.managerDraftPhoto)}" alt="待添加素材预览" referrerpolicy="no-referrer" />` : '<span>＋</span><strong>拍照或上传图片</strong><small>自动抠图 · 纯色背景效果最好</small>'}
                 <input id="material-photo" type="file" accept="image/*" capture="environment" />
               </label>
               <div class="photo-url-import"><span>或者粘贴单颗珠子图片直链</span><div><input id="material-photo-url" class="manager-input" type="url" inputmode="url" placeholder="https://.../bead.jpg" /><button id="load-photo-url" type="button">载入网址</button></div><small>供应商禁止外链时，请先下载图片再从上方上传</small></div>
               <div class="manager-fields">
                 <label>素材名称<input class="manager-input" name="name" required maxlength="24" placeholder="例如：我的白水晶" /></label>
                 <label>品种<input class="manager-input" name="type" required maxlength="24" placeholder="例如：天然水晶" /></label>
-                <label>类目<select class="manager-input" name="category" required>${categories.filter((category) => category !== '全部' && category !== '我的素材').map((category) => `<option>${escapeHtml(category)}</option>`).join('')}</select></label>
+                <label>类目<select class="manager-input" name="category" required>${categories.filter((category) => category !== '全部').map((category) => `<option>${escapeHtml(category)}</option>`).join('')}</select></label>
                 <label>材质<input class="manager-input" name="material" maxlength="24" placeholder="矿石 / 金属 / 木质" /></label>
                 <label>尺寸 mm<input class="manager-input" name="size" type="number" min="2" max="40" step="1" value="10" required /></label>
                 <label>形态<select class="manager-input" name="shape"><option value="round">圆珠</option><option value="spacer">隔片 / 花托</option><option value="charm">吊坠 / 异形</option></select></label>
@@ -687,7 +770,7 @@ function bindEvents() {
       state.managerDraftPhoto = '';
       state.managerError = '';
       state.selectedLibraryId = material.id;
-      state.activeCategory = '我的素材';
+      state.activeCategory = '全部';
       state.exportNotice = '素材已保存';
       render();
       setTimeout(() => {
@@ -704,7 +787,7 @@ function bindEvents() {
     if (state.design.some((item) => item.beadId === id)) return;
     await deleteCustomMaterial(id);
     customMaterials = customMaterials.filter((bead) => bead.id !== id);
-    if (state.selectedLibraryId === id) state.selectedLibraryId = builtInBeads[0].id;
+    if (state.selectedLibraryId === id) state.selectedLibraryId = customMaterials[0]?.id ?? null;
     render();
   }));
   app.querySelectorAll('[data-delete-category]').forEach((element) => element.addEventListener('click', () => {
@@ -837,7 +920,7 @@ function handleAction(action) {
   if (action === 'reset') {
     state.design = createInitialDesign();
     selectOnly(-1);
-    state.selectedLibraryId = 'amber';
+    state.selectedLibraryId = customMaterials[0]?.id ?? null;
     state.braceletSize = 17.5;
     state.multiSelectMode = false;
     state.contextMenu = null;
@@ -939,6 +1022,8 @@ function drawRoundedPanel(context, x, y, width, height, radius) {
 function loadExportImage(source) {
   return new Promise((resolve) => {
     if (!source) return resolve(null);
+    // Remote supplier images may not grant canvas CORS access; keep PNG export safe.
+    if (/^https?:\/\//i.test(source)) return resolve(null);
     const image = new Image();
     if (/^https?:\/\//i.test(source)) {
       image.crossOrigin = 'anonymous';
@@ -1120,7 +1205,7 @@ async function initializeApp() {
     } catch { /* Ignore an invalid local draft and use the sample composition. */ }
   }
   selectOnly(Math.min(4, state.design.length - 1));
-  state.selectedLibraryId = state.design[state.selectedBeadIndex]?.beadId ?? 'amber';
+  state.selectedLibraryId = state.design[state.selectedBeadIndex]?.beadId ?? customMaterials[0]?.id ?? null;
   render();
 }
 
