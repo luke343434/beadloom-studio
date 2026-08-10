@@ -97,6 +97,7 @@ kbd { border: 1px solid #d6d0c7; border-bottom-width: 2px; border-radius: 3px; p
 .drop-slot i { position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; border: 1px solid #b94f3d; border-radius: 50%; background: #f5f1ea; transform: translate(-50%, -50%); }
 .drop-slot.is-target { transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-144px) scale(1.45); }
 .drop-slot.is-target i { width: 16px; height: 16px; background: #b94f3d; box-shadow: 0 0 0 4px rgba(185,79,61,.15); }
+.empty-drop-zone { position: absolute; left: 50%; top: 50%; z-index: 6; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 170px; height: 170px; border: 1px dashed #c7bbad; border-radius: 50%; color: #8f887e; background: rgba(248,245,239,.76); transform: translate(-50%, -50%); transition: border-color .18s, background .18s, transform .18s; }.empty-drop-zone > i { color: #b94f3d; font: 300 30px/1 'Manrope', sans-serif; font-style: normal; }.empty-drop-zone > strong { margin-top: 9px; color: #635e56; font-size: 11px; }.empty-drop-zone > small { margin-top: 5px; color: #a29b92; font-size: 9px; }.empty-drop-zone.is-target { border-color: #b94f3d; background: #f6eae4; transform: translate(-50%, -50%) scale(1.06); }
 .bead-shine { width: 11px; height: 5px; top: 8px; left: 11px; background: rgba(255,255,255,.43); filter: blur(1px); transform: rotate(-30deg); }
 .stage-note { position: absolute; color: #aaa49c; font-size: 9px; letter-spacing: .5px; }
 .top-note { top: 12px; left: 8px; font-family: 'DM Mono', monospace; }
