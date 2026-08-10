@@ -89,7 +89,9 @@ const state = {
   contextMenu: null,
   exportNotice: '',
   libraryManagerOpen: false,
+  managerSourcePhoto: '',
   managerDraftPhoto: '',
+  managerCrop: { zoom: 1, x: 0, y: 0 },
   managerError: '',
   saved: false,
 };
@@ -276,6 +278,102 @@ function optimizeMaterialPhoto(file) {
   });
 }
 
+function readMaterialPhoto(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImageSource(source) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.referrerPolicy = 'no-referrer';
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error('图片读取失败'));
+    image.src = source;
+  });
+}
+
+async function drawMaterialCropper() {
+  const canvas = app.querySelector('#material-crop-canvas');
+  if (!canvas || !state.managerSourcePhoto) return;
+  const context = canvas.getContext('2d');
+  const image = await loadImageSource(state.managerSourcePhoto);
+  const width = canvas.width;
+  const height = canvas.height;
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = 166;
+  // Start with enough image area to fully cover the extraction circle.
+  const baseScale = Math.max((radius * 2) / image.width, (radius * 2) / image.height);
+  const scale = baseScale * state.managerCrop.zoom;
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  const imageX = centerX - drawWidth / 2 + state.managerCrop.x;
+  const imageY = centerY - drawHeight / 2 + state.managerCrop.y;
+  context.clearRect(0, 0, width, height);
+  const tile = 18;
+  for (let y = 0; y < height; y += tile) {
+    for (let x = 0; x < width; x += tile) {
+      context.fillStyle = ((x / tile + y / tile) % 2) ? '#f1ece5' : '#fbf9f5';
+      context.fillRect(x, y, tile, tile);
+    }
+  }
+  context.drawImage(image, imageX, imageY, drawWidth, drawHeight);
+  context.fillStyle = 'rgba(35,31,27,.42)';
+  context.beginPath();
+  context.rect(0, 0, width, height);
+  context.arc(centerX, centerY, radius, 0, Math.PI * 2, true);
+  context.fill('evenodd');
+  context.strokeStyle = '#bd4f3e';
+  context.lineWidth = 3;
+  context.setLineDash([12, 9]);
+  context.beginPath();
+  context.arc(centerX, centerY, radius, 0, Math.PI * 2);
+  context.stroke();
+  context.setLineDash([]);
+  context.strokeStyle = 'rgba(255,255,255,.9)';
+  context.lineWidth = 1;
+  context.beginPath();
+  context.arc(centerX, centerY, radius - 4, 0, Math.PI * 2);
+  context.stroke();
+  canvas.dataset.imageWidth = image.width;
+  canvas.dataset.imageHeight = image.height;
+  canvas.dataset.baseScale = baseScale;
+}
+
+async function extractMaterialCircle() {
+  const canvas = app.querySelector('#material-crop-canvas');
+  if (!canvas || !state.managerSourcePhoto) return;
+  const image = await loadImageSource(state.managerSourcePhoto);
+  const centerX = canvas.width / 2;
+  const centerY = canvas.height / 2;
+  const radius = 166;
+  const baseScale = Number(canvas.dataset.baseScale) || Math.max((radius * 2) / image.width, (radius * 2) / image.height);
+  const scale = baseScale * state.managerCrop.zoom;
+  const imageX = centerX - image.width * scale / 2 + state.managerCrop.x;
+  const imageY = centerY - image.height * scale / 2 + state.managerCrop.y;
+  const output = document.createElement('canvas');
+  output.width = 720;
+  output.height = 720;
+  const context = output.getContext('2d');
+  context.beginPath();
+  context.arc(360, 360, 358, 0, Math.PI * 2);
+  context.clip();
+  const outputScale = 720 / (radius * 2);
+  context.drawImage(
+    image,
+    (imageX - (centerX - radius)) * outputScale,
+    (imageY - (centerY - radius)) * outputScale,
+    image.width * scale * outputScale,
+    image.height * scale * outputScale,
+  );
+  state.managerDraftPhoto = output.toDataURL('image/png');
+}
+
 function findNearestInsertIndex(clientX, clientY) {
   let nearest = { index: -1, distance: Infinity, element: null };
   app.querySelectorAll('[data-insert-index]').forEach((slot) => {
@@ -379,7 +477,7 @@ function render() {
           <div class="category-tabs" role="tablist">${categories.map((category) => `<button class="category-tab ${state.activeCategory === category ? 'active' : ''}" data-category="${category}" role="tab" aria-selected="${state.activeCategory === category}">${category}</button>`).join('')}</div>
           <div class="bead-list">${beads.map((bead) => `
             <button class="bead-card ${state.selectedLibraryId === bead.id && state.selectedBeadIndex < 0 ? 'selected' : ''}" data-bead="${bead.id}" draggable="true" aria-pressed="${state.selectedLibraryId === bead.id && state.selectedBeadIndex < 0}" aria-label="${bead.name}，拖入手串或点击选择">
-              <span class="bead-thumb ${bead.id} shape-${bead.shape ?? 'round'}" style="${beadStyle(bead)}">${materialPhoto(bead)}<span></span></span>
+              <span class="bead-thumb ${bead.id} shape-${bead.shape ?? 'round'} ${bead.photo ? 'photo-only' : ''}" style="${beadStyle(bead)}">${materialPhoto(bead)}<span></span></span>
               <span class="bead-card-copy"><strong>${bead.name}</strong><span>${bead.type} · ${bead.size} mm</span></span>
               <span class="add-symbol" aria-hidden="true">⠿</span>
             </button>`).join('') || `<div class="library-onboarding"><span>◎</span><strong>${libraryMaterials().length ? '没有匹配的素材' : '拍下你手里的第一颗珠子'}</strong><small>${libraryMaterials().length ? '换个关键词或类目试试' : '应用会自动抠图并放入这里'}</small><button data-action="open-manager">拍照添加</button></div>`}</div>
@@ -397,7 +495,7 @@ function render() {
               const selected = state.selectedBeadUids.has(instance.uid);
               const primary = state.selectedBeadIndex === index;
               const scale = 0.68 + (bead.size / 20) * 0.55;
-              return `<button class="bracelet-bead ${bead.id} shape-${bead.shape ?? 'round'} ${selected ? 'selected' : ''} ${primary ? 'primary-selected' : ''}" data-index="${index}" draggable="true" aria-pressed="${selected}" aria-label="第 ${index + 1} 颗，${bead.name}${selected ? '，已选择' : ''}" style="--angle:${angle}deg;--scale:${scale};${beadStyle(bead)}"><span class="selection-check">✓</span>${materialPhoto(bead, 'bracelet-photo')}<span class="bead-glow"></span><span class="bead-shine"></span></button>`;
+              return `<button class="bracelet-bead ${bead.id} shape-${bead.shape ?? 'round'} ${bead.photo ? 'photo-only' : ''} ${selected ? 'selected' : ''} ${primary ? 'primary-selected' : ''}" data-index="${index}" draggable="true" aria-pressed="${selected}" aria-label="第 ${index + 1} 颗，${bead.name}${selected ? '，已选择' : ''}" style="--angle:${angle}deg;--scale:${scale};${beadStyle(bead)}"><span class="selection-check">✓</span>${materialPhoto(bead, 'bracelet-photo')}<span class="bead-glow"></span><span class="bead-shine"></span></button>`;
             }).join('') + state.design.map((_, insertIndex) => {
               const angle = (360 / state.design.length) * (insertIndex - 0.5) - 90;
               return `<span class="drop-slot" data-insert-index="${insertIndex}" style="--angle:${angle}deg" aria-hidden="true"><i></i></span>`;
@@ -409,7 +507,7 @@ function render() {
 
         <aside class="inspector-panel">
           <div class="inspector-heading"><span class="section-kicker">INSPECTOR</span><h2>${selectionCount > 1 ? `已选 ${selectionCount} 颗` : selectedBead ? state.selectedBeadIndex >= 0 ? '已选珠子' : '准备添加' : '等待素材'}</h2></div>
-          ${selectedBead ? `<div class="selected-preview"><span class="large-bead ${selectedBead.id} shape-${selectedBead.shape ?? 'round'}" style="${beadStyle(selectedBead)}">${materialPhoto(selectedBead, 'large-photo')}<span></span></span><div><strong>${selectedBead.name}</strong><span>${selectedBead.type}</span></div><button data-action="clear-selection" aria-label="取消选择">×</button></div>
+          ${selectedBead ? `<div class="selected-preview"><span class="large-bead ${selectedBead.id} shape-${selectedBead.shape ?? 'round'} ${selectedBead.photo ? 'photo-only' : ''}" style="${beadStyle(selectedBead)}">${materialPhoto(selectedBead, 'large-photo')}<span></span></span><div><strong>${selectedBead.name}</strong><span>${selectedBead.type}</span></div><button data-action="clear-selection" aria-label="取消选择">×</button></div>
           <div class="detail-list"><div><span>材质</span><strong>${selectedBead.material}</strong></div><div><span>颜色</span><strong><i class="color-dot" style="background:${selectedBead.tone}"></i>${selectedBead.color}</strong></div><div><span>直径</span><strong>${selectedBead.size} mm</strong></div><div><span>表面</span><strong>${selectedBead.finish}</strong></div></div>
           <p class="bead-note">“${selectedBead.note}”</p>
           ${selectedLibrary ? '<button class="add-inspector-button" data-action="add"><span>＋</span> 加入手串</button>' : ''}` : '<div class="inspector-empty"><span>◎</span><strong>还没有个人素材</strong><small>从左侧拍照添加珠子或配件</small></div>'}
@@ -422,7 +520,7 @@ function render() {
       ${contextBead ? `
         <button class="context-backdrop" data-action="close-context" aria-label="关闭珠子编辑菜单"></button>
         <section class="bead-context-menu" style="left:${state.contextMenu.x}px;top:${state.contextMenu.y}px" role="dialog" aria-label="编辑${contextBead.name}">
-          <header><span class="mini-bead ${contextBead.id} shape-${contextBead.shape ?? 'round'}" style="${beadStyle(contextBead)}">${materialPhoto(contextBead, 'mini-photo')}</span><div><small>${contextSelectionCount > 1 ? `已选 ${contextSelectionCount} 颗 · 当前第 ${state.contextMenu.index + 1} 颗` : `第 ${state.contextMenu.index + 1} 颗`}</small><strong>${contextBead.name}</strong></div><button data-action="close-context" aria-label="关闭">×</button></header>
+          <header><span class="mini-bead ${contextBead.id} shape-${contextBead.shape ?? 'round'} ${contextBead.photo ? 'photo-only' : ''}" style="${beadStyle(contextBead)}">${materialPhoto(contextBead, 'mini-photo')}</span><div><small>${contextSelectionCount > 1 ? `已选 ${contextSelectionCount} 颗 · 当前第 ${state.contextMenu.index + 1} 颗` : `第 ${state.contextMenu.index + 1} 颗`}</small><strong>${contextBead.name}</strong></div><button data-action="close-context" aria-label="关闭">×</button></header>
           <div class="context-field"><label for="bead-size">珠子直径 <output data-size-value>${contextBead.size} mm</output></label><input id="bead-size" data-property="size" type="range" min="4" max="20" step="1" value="${contextBead.size}" /><div><span>4 mm</span><span>20 mm</span></div></div>
           <div class="context-field color-field"><label for="bead-color">珠子颜色</label><div><input id="bead-color" data-property="tone" type="color" value="${contextBead.tone}" /><span>${contextBead.color}</span></div></div>
           <div class="context-actions"><button data-action="context-duplicate">⧉ 复制此珠</button><button data-action="reset-bead">↺ 恢复默认</button></div>
@@ -434,10 +532,11 @@ function render() {
           <header class="manager-header"><div><span class="section-kicker">MY COLLECTION</span><h2 id="material-manager-title">素材库管理</h2><p>上传自己手里的珠子与配件，建立个人素材库</p></div><button data-action="close-manager" aria-label="关闭">×</button></header>
           <div class="manager-layout">
             <form id="material-form" class="material-form">
-              <label class="photo-uploader" for="material-photo">
-                ${state.managerDraftPhoto ? `<img src="${escapeHtml(state.managerDraftPhoto)}" alt="待添加素材预览" referrerpolicy="no-referrer" />` : '<span>＋</span><strong>拍照或上传图片</strong><small>自动抠图 · 纯色背景效果最好</small>'}
-                <input id="material-photo" type="file" accept="image/*" capture="environment" />
-              </label>
+              ${state.managerSourcePhoto ? `<div class="photo-cropper">
+                <div class="crop-stage"><canvas id="material-crop-canvas" width="900" height="480" aria-label="拖动和缩放图片，使珠子与虚线圆对齐"></canvas><div class="crop-hint">拖动图片 · 滚轮或滑杆缩放</div></div>
+                <div class="crop-controls"><label>缩放<input id="crop-zoom" type="range" min="0.5" max="4" step="0.01" value="${state.managerCrop.zoom}" /></label><button id="crop-reset" type="button">复位</button><label class="crop-replace">换一张<input id="material-photo" type="file" accept="image/*" capture="environment" /></label><button id="crop-extract" type="button">提取珠子</button></div>
+                <div class="crop-result ${state.managerDraftPhoto ? 'has-result' : ''}"><span>提取结果</span>${state.managerDraftPhoto ? `<img src="${escapeHtml(state.managerDraftPhoto)}" alt="圆形透明珠子素材" />` : '<small>对齐虚线圆后点击“提取珠子”</small>'}</div>
+              </div>` : state.managerDraftPhoto ? `<div class="url-photo-preview"><img src="${escapeHtml(state.managerDraftPhoto)}" alt="网址导入素材预览" referrerpolicy="no-referrer" /><button id="clear-photo" type="button">更换图片</button></div>` : `<label class="photo-uploader" for="material-photo"><span>＋</span><strong>拍照或上传图片</strong><small>上传后可拖动、缩放并圆形提取</small><input id="material-photo" type="file" accept="image/*" capture="environment" /></label>`}
               <div class="photo-url-import"><span>或者粘贴单颗珠子图片直链</span><div><input id="material-photo-url" class="manager-input" type="url" inputmode="url" placeholder="https://.../bead.jpg" /><button id="load-photo-url" type="button">载入网址</button></div><small>供应商禁止外链时，请先下载图片再从上方上传</small></div>
               <div class="manager-fields">
                 <label>素材名称<input class="manager-input" name="name" required maxlength="24" placeholder="例如：我的白水晶" /></label>
@@ -463,6 +562,7 @@ function render() {
         </section>` : ''}
     </div>`;
   bindEvents();
+  drawMaterialCropper().catch(() => {});
 }
 
 function bindEvents() {
@@ -696,20 +796,77 @@ function bindEvents() {
       return;
     }
     try {
-      state.managerDraftPhoto = await optimizeMaterialPhoto(file);
+      state.managerSourcePhoto = await readMaterialPhoto(file);
+      state.managerDraftPhoto = '';
+      state.managerCrop = { zoom: 1, x: 0, y: 0 };
       state.managerError = '';
-      const uploader = app.querySelector('.photo-uploader');
-      uploader.querySelector('img')?.remove();
-      uploader.querySelectorAll(':scope > span, :scope > strong, :scope > small').forEach((element) => element.remove());
-      const preview = document.createElement('img');
-      preview.src = state.managerDraftPhoto;
-      preview.alt = '待添加素材预览';
-      uploader.insertBefore(preview, event.target);
-      uploader.classList.add('has-photo');
+      render();
     } catch {
       state.managerError = '图片处理失败，请换一张图片';
       render();
     }
+  });
+  const cropCanvas = app.querySelector('#material-crop-canvas');
+  if (cropCanvas) {
+    cropCanvas.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      const origin = { x: event.clientX, y: event.clientY };
+      const start = { x: state.managerCrop.x, y: state.managerCrop.y };
+      cropCanvas.setPointerCapture(event.pointerId);
+      const move = (moveEvent) => {
+        const rect = cropCanvas.getBoundingClientRect();
+        state.managerCrop.x = start.x + (moveEvent.clientX - origin.x) * (cropCanvas.width / rect.width);
+        state.managerCrop.y = start.y + (moveEvent.clientY - origin.y) * (cropCanvas.height / rect.height);
+        state.managerDraftPhoto = '';
+        drawMaterialCropper().catch(() => {});
+        const result = app.querySelector('.crop-result');
+        if (result) result.innerHTML = '<span>提取结果</span><small>位置已变化，请重新提取</small>';
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+      };
+      window.addEventListener('pointermove', move, { passive: false });
+      window.addEventListener('pointerup', up, { once: true });
+    });
+    cropCanvas.addEventListener('wheel', (event) => {
+      event.preventDefault();
+      state.managerCrop.zoom = Math.max(.5, Math.min(4, state.managerCrop.zoom * (event.deltaY > 0 ? .92 : 1.08)));
+      state.managerDraftPhoto = '';
+      const range = app.querySelector('#crop-zoom');
+      if (range) range.value = state.managerCrop.zoom;
+      drawMaterialCropper().catch(() => {});
+    }, { passive: false });
+  }
+  app.querySelector('#crop-zoom')?.addEventListener('input', (event) => {
+    state.managerCrop.zoom = Number(event.target.value);
+    state.managerDraftPhoto = '';
+    drawMaterialCropper().catch(() => {});
+    const result = app.querySelector('.crop-result');
+    if (result) result.innerHTML = '<span>提取结果</span><small>缩放已变化，请重新提取</small>';
+  });
+  app.querySelector('#crop-reset')?.addEventListener('click', () => {
+    state.managerCrop = { zoom: 1, x: 0, y: 0 };
+    state.managerDraftPhoto = '';
+    app.querySelector('#crop-zoom').value = 1;
+    drawMaterialCropper().catch(() => {});
+  });
+  app.querySelector('#crop-extract')?.addEventListener('click', async () => {
+    try {
+      await extractMaterialCircle();
+      state.managerError = '';
+      const result = app.querySelector('.crop-result');
+      if (result) result.innerHTML = `<span>提取结果</span><img src="${state.managerDraftPhoto}" alt="圆形透明珠子素材" />`;
+    } catch {
+      state.managerError = '提取失败，请重新上传图片';
+      render();
+    }
+  });
+  app.querySelector('#clear-photo')?.addEventListener('click', () => {
+    state.managerSourcePhoto = '';
+    state.managerDraftPhoto = '';
+    state.managerCrop = { zoom: 1, x: 0, y: 0 };
+    render();
   });
   app.querySelector('#load-photo-url')?.addEventListener('click', () => {
     const input = app.querySelector('#material-photo-url');
@@ -722,17 +879,10 @@ function bindEvents() {
     const image = new Image();
     image.referrerPolicy = 'no-referrer';
     image.onload = () => {
+      state.managerSourcePhoto = '';
       state.managerDraftPhoto = url;
       state.managerError = '';
-      const uploader = app.querySelector('.photo-uploader');
-      uploader.querySelector('img')?.remove();
-      uploader.querySelectorAll(':scope > span, :scope > strong, :scope > small').forEach((element) => element.remove());
-      const preview = document.createElement('img');
-      preview.src = url;
-      preview.alt = '待添加素材预览';
-      preview.referrerPolicy = 'no-referrer';
-      uploader.insertBefore(preview, uploader.querySelector('input'));
-      uploader.classList.add('has-photo');
+      render();
     };
     image.onerror = () => {
       state.managerError = '这个网址无法直接加载，请下载图片后再上传';
@@ -768,6 +918,7 @@ function bindEvents() {
       await saveCustomMaterial(material);
       customMaterials.push(material);
       state.managerDraftPhoto = '';
+      state.managerSourcePhoto = '';
       state.managerError = '';
       state.selectedLibraryId = material.id;
       state.activeCategory = '全部';
@@ -820,7 +971,9 @@ function handleAction(action) {
   }
   if (action === 'close-manager') {
     state.libraryManagerOpen = false;
+    state.managerSourcePhoto = '';
     state.managerDraftPhoto = '';
+    state.managerCrop = { zoom: 1, x: 0, y: 0 };
     state.managerError = '';
   }
   if (action === 'add-category') {
