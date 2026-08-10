@@ -129,7 +129,7 @@ function escapeHtml(value = '') {
 }
 
 function materialPhoto(bead, className = 'bead-photo') {
-  return bead.photo ? `<img class="${className}" src="${escapeHtml(bead.photo)}" alt="" />` : '';
+  return bead.photo ? `<img class="${className}" src="${escapeHtml(bead.photo)}" alt="" referrerpolicy="no-referrer" />` : '';
 }
 
 function openMaterialDatabase() {
@@ -352,9 +352,10 @@ function render() {
           <div class="manager-layout">
             <form id="material-form" class="material-form">
               <label class="photo-uploader" for="material-photo">
-                ${state.managerDraftPhoto ? `<img src="${escapeHtml(state.managerDraftPhoto)}" alt="待添加素材预览" />` : '<span>＋</span><strong>拍照或上传图片</strong><small>自动裁切并压缩</small>'}
+                ${state.managerDraftPhoto ? `<img src="${escapeHtml(state.managerDraftPhoto)}" alt="待添加素材预览" referrerpolicy="no-referrer" />` : '<span>＋</span><strong>拍照或上传图片</strong><small>自动裁切并压缩</small>'}
                 <input id="material-photo" type="file" accept="image/*" capture="environment" />
               </label>
+              <div class="photo-url-import"><span>或者粘贴单颗珠子图片直链</span><div><input id="material-photo-url" class="manager-input" type="url" inputmode="url" placeholder="https://.../bead.jpg" /><button id="load-photo-url" type="button">载入网址</button></div><small>供应商禁止外链时，请先下载图片再从上方上传</small></div>
               <div class="manager-fields">
                 <label>素材名称<input class="manager-input" name="name" required maxlength="24" placeholder="例如：我的白水晶" /></label>
                 <label>品种<input class="manager-input" name="type" required maxlength="24" placeholder="例如：天然水晶" /></label>
@@ -626,6 +627,35 @@ function bindEvents() {
       state.managerError = '图片处理失败，请换一张图片';
       render();
     }
+  });
+  app.querySelector('#load-photo-url')?.addEventListener('click', () => {
+    const input = app.querySelector('#material-photo-url');
+    const url = input?.value.trim();
+    if (!/^https?:\/\//i.test(url ?? '')) {
+      state.managerError = '请输入以 http:// 或 https:// 开头的图片直链';
+      render();
+      return;
+    }
+    const image = new Image();
+    image.referrerPolicy = 'no-referrer';
+    image.onload = () => {
+      state.managerDraftPhoto = url;
+      state.managerError = '';
+      const uploader = app.querySelector('.photo-uploader');
+      uploader.querySelector('img')?.remove();
+      uploader.querySelectorAll(':scope > span, :scope > strong, :scope > small').forEach((element) => element.remove());
+      const preview = document.createElement('img');
+      preview.src = url;
+      preview.alt = '待添加素材预览';
+      preview.referrerPolicy = 'no-referrer';
+      uploader.insertBefore(preview, uploader.querySelector('input'));
+      uploader.classList.add('has-photo');
+    };
+    image.onerror = () => {
+      state.managerError = '这个网址无法直接加载，请下载图片后再上传';
+      render();
+    };
+    image.src = url;
   });
   app.querySelector('#material-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -910,6 +940,10 @@ function loadExportImage(source) {
   return new Promise((resolve) => {
     if (!source) return resolve(null);
     const image = new Image();
+    if (/^https?:\/\//i.test(source)) {
+      image.crossOrigin = 'anonymous';
+      image.referrerPolicy = 'no-referrer';
+    }
     image.onload = () => resolve(image);
     image.onerror = () => resolve(null);
     image.src = source;
