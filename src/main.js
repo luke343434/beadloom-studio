@@ -33,6 +33,15 @@ const builtInBeads = [
   { id: 'red-tassel', name: '朱砂流苏', type: '流苏', material: '丝线', size: 18, color: '朱砂红', tone: '#a8483d', category: '吊坠流苏', finish: '丝线编织', note: '用于增加垂坠感和东方气质', shape: 'charm' },
 ];
 
+const braceletColors = [
+  { id: 'natural', name: '原色', tone: '#d4cabd' },
+  { id: 'ink', name: '墨黑', tone: '#292823' },
+  { id: 'vermilion', name: '朱砂红', tone: '#a8483d' },
+  { id: 'walnut', name: '深棕', tone: '#7c5036' },
+  { id: 'turquoise', name: '松石绿', tone: '#4f9995' },
+  { id: 'gold', name: '暖金', tone: '#c6a25e' },
+];
+
 let customMaterials = [];
 let customCategories = [];
 let suppressLibraryClick = false;
@@ -75,6 +84,7 @@ const state = {
   selectedLibraryId: null,
   selectedBeadIndex: -1,
   braceletSize: 17.5,
+  braceletColor: braceletColors[0].tone,
   design: createInitialDesign(),
   selectedBeadUids: new Set(),
   selectionAnchorIndex: -1,
@@ -320,7 +330,7 @@ function render() {
 
         <section class="design-panel">
           <div class="design-header"><div><span class="section-kicker">YOUR COMPOSITION</span><h2>春日留白</h2><p>从左侧拖入珠子；多选后可批量复制或删除</p></div></div>
-          <div class="bracelet-stage" aria-label="手串预览区">
+          <div class="bracelet-stage" style="--cord-color:${state.braceletColor}" aria-label="手串预览区">
             <div class="stage-note top-note">可视化预览 <span></span></div>
             <div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="center-label"><span>${state.design.length ? 'HANDMADE' : 'EMPTY DESIGN'}</span><strong>${state.design.length ? state.braceletSize.toFixed(1) : '0'}</strong><small>${state.design.length ? '手围 cm' : '颗珠子'}</small></div>
             <div class="bracelet-beads">${state.design.length ? state.design.map((instance, index) => {
@@ -346,8 +356,9 @@ function render() {
           <p class="bead-note">“${selectedBead.note}”</p>
           ${selectedLibrary ? '<button class="add-inspector-button" data-action="add"><span>＋</span> 加入手串</button>' : ''}` : '<div class="inspector-empty"><span>◎</span><strong>还没有个人素材</strong><small>从左侧拍照添加珠子或配件</small></div>'}
           ${state.design.length ? `<div class="measure-section"><div class="measure-heading"><span class="section-kicker">MEASUREMENTS</span><span>实时估算</span></div><div class="measure-grid"><div class="measure-card"><span>成品周长</span><strong>${circumference}<small> cm</small></strong></div><div class="measure-card"><span>珠子总长</span><strong>${length}<small> mm</small></strong></div><div class="measure-card"><span>预留空隙</span><strong>${gap}<small> mm</small></strong></div><div class="measure-card"><span>建议线长</span><strong>${(state.braceletSize + 5).toFixed(0)}<small> cm</small></strong></div></div></div>` : ''}
-          <div class="size-section"><div class="measure-heading"><span class="section-kicker">WRIST SIZE</span><strong>${state.braceletSize.toFixed(1)} cm</strong></div><input id="size-range" class="size-range" type="range" min="14" max="22" step="0.5" value="${state.braceletSize}" aria-label="手腕尺寸" /><div class="range-labels"><span>14 cm</span><span>22 cm</span></div></div>
-        </aside>
+           <div class="size-section"><div class="measure-heading"><span class="section-kicker">WRIST SIZE</span><strong>${state.braceletSize.toFixed(1)} cm</strong></div><input id="size-range" class="size-range" type="range" min="14" max="22" step="0.5" value="${state.braceletSize}" aria-label="手腕尺寸" /><div class="range-labels"><span>14 cm</span><span>22 cm</span></div></div>
+           <div class="cord-section"><div class="measure-heading"><span class="section-kicker">BRACELET COLOR</span><span>串线颜色</span></div><div class="cord-options" role="radiogroup" aria-label="手链颜色">${braceletColors.map((color) => `<button class="cord-option ${state.braceletColor === color.tone ? 'active' : ''}" data-cord-color="${color.tone}" style="--swatch:${color.tone}" role="radio" aria-label="${color.name}" aria-checked="${state.braceletColor === color.tone}"><i></i><span>${color.name}</span></button>`).join('')}</div></div>
+         </aside>
       </main>
       ${state.exportNotice ? `<div class="export-toast" role="status">✓ ${state.exportNotice}</div>` : ''}
       ${contextBead ? `
@@ -462,6 +473,10 @@ function bindEvents() {
     state.braceletSize = Number(event.target.value);
     render();
   });
+  app.querySelectorAll('[data-cord-color]').forEach((element) => element.addEventListener('click', () => {
+    state.braceletColor = element.dataset.cordColor;
+    render();
+  }));
   app.querySelectorAll('[data-index]').forEach((element) => element.addEventListener('click', (event) => {
     if (suppressBraceletClick) {
       suppressBraceletClick = false;
@@ -816,6 +831,7 @@ async function handleAction(action) {
     selectOnly(-1);
     state.selectedLibraryId = customMaterials[0]?.id ?? null;
     state.braceletSize = 17.5;
+    state.braceletColor = braceletColors[0].tone;
     state.multiSelectMode = false;
     state.contextMenu = null;
   }
@@ -970,11 +986,14 @@ async function exportDesign() {
   const centerX = 565;
   const centerY = 505;
   const orbitRadius = 290;
-  context.strokeStyle = 'rgba(154,142,128,.28)';
+  context.strokeStyle = state.braceletColor;
+  context.globalAlpha = .65;
   context.lineWidth = 2;
   context.beginPath();
   context.arc(centerX, centerY, orbitRadius + 47, 0, Math.PI * 2);
   context.stroke();
+  context.globalAlpha = 1;
+  context.strokeStyle = mixColor(state.braceletColor, { r: 244, g: 240, b: 233 }, .55);
   context.setLineDash([8, 10]);
   context.beginPath();
   context.arc(centerX, centerY, orbitRadius - 82, 0, Math.PI * 2);
