@@ -225,6 +225,7 @@ function findNearestInsertIndex(clientX, clientY) {
     if (distance < nearest.distance) nearest = { index: Number(slot.dataset.insertIndex), distance, element: slot };
   });
   app.querySelectorAll('.drop-slot.is-target').forEach((slot) => slot.classList.remove('is-target'));
+  app.querySelectorAll('.empty-drop-zone.is-target').forEach((slot) => slot.classList.remove('is-target'));
   nearest.element?.classList.add('is-target');
   state.dragTargetIndex = nearest.index;
   return nearest.index;
@@ -248,39 +249,6 @@ function selectOnly(index) {
   state.selectedBeadUids = new Set(bead ? [bead.uid] : []);
   state.selectedBeadIndex = bead ? index : -1;
   state.selectionAnchorIndex = bead ? index : -1;
-}
-
-function moveSelectionToInsert(sourceIndex, targetIndex) {
-  if (sourceIndex < 0 || targetIndex < 0) return false;
-  const source = state.design[sourceIndex];
-  const movingUids = state.selectedBeadUids.has(source.uid) && state.selectedBeadUids.size > 1
-    ? new Set(state.selectedBeadUids)
-    : new Set([source.uid]);
-  const movingIndexes = state.design.map((bead, index) => movingUids.has(bead.uid) ? index : -1).filter((index) => index >= 0);
-  const first = movingIndexes[0];
-  const last = movingIndexes.at(-1);
-  if (targetIndex >= first && targetIndex <= last + 1 && movingIndexes.length === last - first + 1) return false;
-  const movingBeads = state.design.filter((bead) => movingUids.has(bead.uid));
-  const removedBeforeTarget = movingIndexes.filter((index) => index < targetIndex).length;
-  const remaining = state.design.filter((bead) => !movingUids.has(bead.uid));
-  const adjustedIndex = Math.max(0, targetIndex - removedBeforeTarget);
-  remaining.splice(adjustedIndex, 0, ...movingBeads);
-  state.design = remaining;
-  state.selectedBeadUids = new Set(movingBeads.map((bead) => bead.uid));
-  state.selectedBeadIndex = adjustedIndex;
-  state.selectionAnchorIndex = adjustedIndex;
-  return true;
-}
-
-function syncBraceletPositions(draggedUid = null) {
-  const count = state.design.length;
-  state.design.forEach((instance, index) => {
-    const element = app.querySelector(`[data-uid="${instance.uid}"]`);
-    if (!element) return;
-    element.dataset.index = index;
-    if (instance.uid === draggedUid) return;
-    element.style.setProperty('--angle', `${(360 / count) * index - 90}deg`);
-  });
 }
 
 function findNearestBeadIndex(clientX, clientY, excludedUid) {
@@ -372,7 +340,7 @@ function render() {
             }).join('') : '<span class="empty-drop-zone" data-insert-index="0"><i>＋</i><strong>拖入第一颗珠子</strong><small>从左侧实拍素材库开始</small></span>'}</div>
             <div class="stage-note bottom-note"><span class="legend-line"></span>${state.design.length ? '拖拽插入 · Ctrl/Cmd 多选' : '当前为空手串'}</div>
           </div>
-          <div class="design-toolbar"><span class="toolbar-count"><strong>${state.design.length}</strong> 颗珠子</span><button class="multi-select-button ${state.multiSelectMode ? 'active' : ''}" data-action="toggle-multi" aria-pressed="${state.multiSelectMode}">✓ 多选${selectionCount ? ` · ${selectionCount}` : ''}</button><span class="toolbar-divider"></span><button data-action="select-all">全选</button><button data-action="duplicate" ${selectionCount < 1 ? 'disabled' : ''}>⧉ 复制${selectionCount > 1 ? ` ${selectionCount} 颗` : ''}</button><button class="delete-button" data-action="delete" ${selectionCount < 1 || selectionCount >= state.design.length ? 'disabled' : ''}>⌫ 删除${selectionCount > 1 ? ` ${selectionCount} 颗` : ''}</button></div>
+          <div class="design-toolbar"><span class="toolbar-count"><strong>${state.design.length}</strong> 颗珠子</span><button class="multi-select-button ${state.multiSelectMode ? 'active' : ''}" data-action="toggle-multi" aria-pressed="${state.multiSelectMode}">✓ 多选${selectionCount ? ` · ${selectionCount}` : ''}</button><span class="toolbar-divider"></span><button data-action="select-all">全选</button><button data-action="duplicate" ${selectionCount < 1 ? 'disabled' : ''}>⧉ 复制${selectionCount > 1 ? ` ${selectionCount} 颗` : ''}</button><span class="toolbar-hint">右键删除已选</span></div>
         </section>
 
         <aside class="inspector-panel">
@@ -393,7 +361,7 @@ function render() {
           <div class="context-field"><label for="bead-size">珠子直径 <output data-size-value>${contextBead.size} mm</output></label><input id="bead-size" data-property="size" type="range" min="4" max="20" step="1" value="${contextBead.size}" /><div><span>4 mm</span><span>20 mm</span></div></div>
           <div class="context-field color-field"><label for="bead-color">珠子颜色</label><div><input id="bead-color" data-property="tone" type="color" value="${contextBead.tone}" /><span>${contextBead.color}</span></div></div>
           <div class="context-actions"><button data-action="context-duplicate">⧉ 复制此珠</button><button data-action="reset-bead">↺ 恢复默认</button></div>
-          <button class="context-delete" data-action="context-delete" ${contextSelectionCount >= state.design.length ? 'disabled' : ''}>⌫ ${contextSelectionCount > 1 ? `删除已选 ${contextSelectionCount} 颗珠子` : '从手串中删除'}</button>
+          <button class="context-delete" data-action="context-delete">⌫ ${contextSelectionCount > 1 ? `删除已选 ${contextSelectionCount} 颗珠子` : '从手串中删除'}</button>
         </section>` : ''}
       ${state.libraryManagerOpen ? `
         <button class="manager-backdrop" data-action="close-manager" aria-label="关闭素材管理"></button>
@@ -466,9 +434,10 @@ function bindEvents() {
 
       const handleUp = () => {
         if (dragging) {
-          if (isPointInStage(lastPoint.x, lastPoint.y)) insertLibraryBead(beadId, targetIndex);
+          if (isPointInStage(lastPoint.x, lastPoint.y) && targetIndex >= 0) insertLibraryBead(beadId, targetIndex);
           state.libraryDraggedId = null;
           state.dragTargetIndex = -1;
+          app.querySelectorAll('.drop-slot.is-target, .empty-drop-zone.is-target').forEach((slot) => slot.classList.remove('is-target'));
           render();
           setTimeout(() => { suppressLibraryClick = false; }, 0);
         }
@@ -835,10 +804,9 @@ async function handleAction(action) {
   if (action === 'context-delete' && state.contextMenu) {
     const index = state.contextMenu.index;
     const selectedUids = new Set(state.contextMenu.selectedUids ?? [state.design[index]?.uid]);
-    if (selectedUids.size >= state.design.length) return;
     state.design = state.design.filter((bead) => !selectedUids.has(bead.uid));
     selectOnly(Math.min(index, state.design.length - 1));
-    state.selectedLibraryId = state.design[state.selectedBeadIndex].beadId;
+    state.selectedLibraryId = state.design[state.selectedBeadIndex]?.beadId ?? null;
     state.contextMenu = null;
   }
   if (action === 'reset') {
