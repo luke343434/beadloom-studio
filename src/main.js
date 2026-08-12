@@ -231,6 +231,11 @@ function findNearestInsertIndex(clientX, clientY) {
   return nearest.index;
 }
 
+function clearInsertTargets() {
+  app.querySelectorAll('.drop-slot.is-target, .empty-drop-zone.is-target').forEach((slot) => slot.classList.remove('is-target'));
+  state.dragTargetIndex = -1;
+}
+
 function isPointInStage(clientX, clientY) {
   const stage = app.querySelector('.bracelet-stage');
   if (!stage) return false;
@@ -251,25 +256,16 @@ function selectOnly(index) {
   state.selectionAnchorIndex = bead ? index : -1;
 }
 
-function findNearestBeadIndex(clientX, clientY, excludedUid) {
-  let nearest = { index: -1, distance: Infinity };
-  app.querySelectorAll('.bracelet-bead').forEach((element) => {
-    if (element.dataset.uid === excludedUid) return;
-    const rect = element.getBoundingClientRect();
-    const distance = Math.hypot(clientX - (rect.left + rect.width / 2), clientY - (rect.top + rect.height / 2));
-    if (distance < nearest.distance) nearest = { index: Number(element.dataset.index), distance };
-  });
-  app.querySelectorAll('.bracelet-bead.drop-target').forEach((element) => element.classList.remove('drop-target'));
-  if (nearest.index >= 0) app.querySelector(`.bracelet-bead[data-index="${nearest.index}"]`)?.classList.add('drop-target');
-  return nearest.index;
-}
-
-function swapBeads(firstIndex, secondIndex) {
-  if (firstIndex < 0 || secondIndex < 0 || firstIndex === secondIndex) return false;
-  [state.design[firstIndex], state.design[secondIndex]] = [state.design[secondIndex], state.design[firstIndex]];
-  state.selectedBeadIndex = secondIndex;
-  state.selectionAnchorIndex = secondIndex;
-  return true;
+function moveBeadToInsert(sourceUid, targetIndex) {
+  const sourceIndex = state.design.findIndex((bead) => bead.uid === sourceUid);
+  if (sourceIndex < 0 || targetIndex < 0) return false;
+  if (sourceIndex === state.design.length - 1 && targetIndex === 0) return false;
+  const [movingBead] = state.design.splice(sourceIndex, 1);
+  const adjustedIndex = Math.max(0, Math.min(state.design.length, targetIndex - (sourceIndex < targetIndex ? 1 : 0)));
+  state.design.splice(adjustedIndex, 0, movingBead);
+  state.selectedBeadIndex = adjustedIndex;
+  state.selectionAnchorIndex = adjustedIndex;
+  return adjustedIndex !== sourceIndex;
 }
 
 function insertLibraryBead(beadId, targetIndex) {
@@ -515,11 +511,13 @@ function bindEvents() {
       const sourceIndex = Number(element.dataset.index);
       const sourceUid = state.design[sourceIndex].uid;
       const origin = { x: event.clientX, y: event.clientY };
+      let lastPoint = origin;
       let dragging = false;
       let targetIndex = -1;
       element.setPointerCapture(event.pointerId);
 
       const handleMove = (moveEvent) => {
+        lastPoint = { x: moveEvent.clientX, y: moveEvent.clientY };
         if (!dragging && Math.hypot(moveEvent.clientX - origin.x, moveEvent.clientY - origin.y) < 6) return;
         moveEvent.preventDefault();
         if (!dragging) {
@@ -531,7 +529,11 @@ function bindEvents() {
         }
         element.style.setProperty('--drag-x', `${moveEvent.clientX - origin.x}px`);
         element.style.setProperty('--drag-y', `${moveEvent.clientY - origin.y}px`);
-        targetIndex = findNearestBeadIndex(moveEvent.clientX, moveEvent.clientY, sourceUid);
+        if (isPointInStage(moveEvent.clientX, moveEvent.clientY)) targetIndex = findNearestInsertIndex(moveEvent.clientX, moveEvent.clientY);
+        else {
+          targetIndex = -1;
+          clearInsertTargets();
+        }
       };
 
       const handleUp = () => {
@@ -544,8 +546,8 @@ function bindEvents() {
         element.classList.remove('pointer-dragging');
         element.style.removeProperty('--drag-x');
         element.style.removeProperty('--drag-y');
-        app.querySelectorAll('.bracelet-bead.drop-target').forEach((bead) => bead.classList.remove('drop-target'));
-        if (targetIndex >= 0) swapBeads(state.design.findIndex((bead) => bead.uid === sourceUid), targetIndex);
+        clearInsertTargets();
+        if (isPointInStage(lastPoint.x, lastPoint.y) && targetIndex >= 0) moveBeadToInsert(sourceUid, targetIndex);
         state.draggedBeadIndex = -1;
         state.dragTargetIndex = -1;
         state.contextMenu = null;
