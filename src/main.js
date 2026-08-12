@@ -332,7 +332,7 @@ function render() {
           <div class="design-header"><div><span class="section-kicker">YOUR COMPOSITION</span><h2>春日留白</h2><p>从左侧拖入珠子；多选后可批量复制或删除</p></div></div>
           <div class="bracelet-stage" style="--cord-color:${state.braceletColor}" aria-label="手串预览区">
             <div class="stage-note top-note">可视化预览 <span></span></div>
-            <div class="orbit orbit-outer"></div><div class="orbit orbit-inner"></div><div class="center-label"><span>${state.design.length ? 'HANDMADE' : 'EMPTY DESIGN'}</span><strong>${state.design.length ? state.braceletSize.toFixed(1) : '0'}</strong><small>${state.design.length ? '手围 cm' : '颗珠子'}</small></div>
+            <div class="orbit cord-orbit"></div><div class="center-label"><span>${state.design.length ? 'HANDMADE' : 'EMPTY DESIGN'}</span><strong>${state.design.length ? state.braceletSize.toFixed(1) : '0'}</strong><small>${state.design.length ? '手围 cm' : '颗珠子'}</small></div>
             <div class="bracelet-beads">${state.design.length ? state.design.map((instance, index) => {
               const bead = getBead(instance);
               const angle = (360 / state.design.length) * index - 90;
@@ -987,18 +987,12 @@ async function exportDesign() {
   const centerY = 505;
   const orbitRadius = 290;
   context.strokeStyle = state.braceletColor;
-  context.globalAlpha = .65;
-  context.lineWidth = 2;
+  context.globalAlpha = .72;
+  context.lineWidth = 7;
   context.beginPath();
-  context.arc(centerX, centerY, orbitRadius + 47, 0, Math.PI * 2);
+  context.arc(centerX, centerY, orbitRadius, 0, Math.PI * 2);
   context.stroke();
   context.globalAlpha = 1;
-  context.strokeStyle = mixColor(state.braceletColor, { r: 244, g: 240, b: 233 }, .55);
-  context.setLineDash([8, 10]);
-  context.beginPath();
-  context.arc(centerX, centerY, orbitRadius - 82, 0, Math.PI * 2);
-  context.stroke();
-  context.setLineDash([]);
 
   beads.forEach((bead, index) => {
     const angle = (Math.PI * 2 * index / beads.length) - Math.PI / 2;
