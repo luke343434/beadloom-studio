@@ -36,6 +36,7 @@ const builtInBeads = [
 let customMaterials = [];
 let customCategories = [];
 let suppressLibraryClick = false;
+let suppressBraceletClick = false;
 
 function allMaterials() {
   return [...builtInBeads, ...customMaterials];
@@ -282,6 +283,27 @@ function syncBraceletPositions(draggedUid = null) {
   });
 }
 
+function findNearestBeadIndex(clientX, clientY, excludedUid) {
+  let nearest = { index: -1, distance: Infinity };
+  app.querySelectorAll('.bracelet-bead').forEach((element) => {
+    if (element.dataset.uid === excludedUid) return;
+    const rect = element.getBoundingClientRect();
+    const distance = Math.hypot(clientX - (rect.left + rect.width / 2), clientY - (rect.top + rect.height / 2));
+    if (distance < nearest.distance) nearest = { index: Number(element.dataset.index), distance };
+  });
+  app.querySelectorAll('.bracelet-bead.drop-target').forEach((element) => element.classList.remove('drop-target'));
+  if (nearest.index >= 0) app.querySelector(`.bracelet-bead[data-index="${nearest.index}"]`)?.classList.add('drop-target');
+  return nearest.index;
+}
+
+function swapBeads(firstIndex, secondIndex) {
+  if (firstIndex < 0 || secondIndex < 0 || firstIndex === secondIndex) return false;
+  [state.design[firstIndex], state.design[secondIndex]] = [state.design[secondIndex], state.design[firstIndex]];
+  state.selectedBeadIndex = secondIndex;
+  state.selectionAnchorIndex = secondIndex;
+  return true;
+}
+
 function insertLibraryBead(beadId, targetIndex) {
   if (!beadId || targetIndex < 0) return false;
   const instance = createBeadInstance(beadId);
@@ -476,6 +498,10 @@ function bindEvents() {
     render();
   });
   app.querySelectorAll('[data-index]').forEach((element) => element.addEventListener('click', (event) => {
+    if (suppressBraceletClick) {
+      suppressBraceletClick = false;
+      return;
+    }
     const index = Number(element.dataset.index);
     const uid = state.design[index].uid;
     const additive = state.multiSelectMode || event.ctrlKey || event.metaKey;
@@ -522,7 +548,6 @@ function bindEvents() {
       const origin = { x: event.clientX, y: event.clientY };
       let dragging = false;
       let targetIndex = -1;
-      let lastTargetIndex = -1;
       element.setPointerCapture(event.pointerId);
 
       const handleMove = (moveEvent) => {
@@ -530,18 +555,14 @@ function bindEvents() {
         moveEvent.preventDefault();
         if (!dragging) {
           dragging = true;
+          suppressBraceletClick = true;
           state.draggedBeadIndex = sourceIndex;
           element.classList.add('pointer-dragging');
           app.querySelector('.bracelet-stage')?.classList.add('is-dragging');
         }
         element.style.setProperty('--drag-x', `${moveEvent.clientX - origin.x}px`);
         element.style.setProperty('--drag-y', `${moveEvent.clientY - origin.y}px`);
-        targetIndex = findNearestInsertIndex(moveEvent.clientX, moveEvent.clientY);
-        if (targetIndex !== lastTargetIndex) {
-          const currentIndex = state.design.findIndex((bead) => bead.uid === sourceUid);
-          if (moveSelectionToInsert(currentIndex, targetIndex)) syncBraceletPositions(sourceUid);
-          lastTargetIndex = targetIndex;
-        }
+        targetIndex = findNearestBeadIndex(moveEvent.clientX, moveEvent.clientY, sourceUid);
       };
 
       const handleUp = () => {
@@ -554,6 +575,8 @@ function bindEvents() {
         element.classList.remove('pointer-dragging');
         element.style.removeProperty('--drag-x');
         element.style.removeProperty('--drag-y');
+        app.querySelectorAll('.bracelet-bead.drop-target').forEach((bead) => bead.classList.remove('drop-target'));
+        if (targetIndex >= 0) swapBeads(state.design.findIndex((bead) => bead.uid === sourceUid), targetIndex);
         state.draggedBeadIndex = -1;
         state.dragTargetIndex = -1;
         state.contextMenu = null;
@@ -561,6 +584,7 @@ function bindEvents() {
         window.removeEventListener('pointermove', handleMove);
         window.removeEventListener('pointerup', handleUp);
         window.removeEventListener('pointercancel', handleUp);
+        setTimeout(() => { suppressBraceletClick = false; }, 0);
       };
 
       window.addEventListener('pointermove', handleMove, { passive: false });
